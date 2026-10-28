@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vikku AI Studio</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;padding:16px;color:#fff;font-family:Arial,sans-serif;
+ background:radial-gradient(circle at top,#55278b,#171126 60%,#0b0912);
+ min-height:100vh
+}
+main{max-width:850px;margin:auto}
+header{padding:16px 0 22px}
+h1{font-size:27px;margin:0}
+header p,.muted{color:#c8b8e8}
+.card{
+ background:#ffffff10;border:1px solid #ffffff20;
+ border-radius:18px;padding:17px;margin-bottom:16px
+}
+h2{font-size:18px;margin-top:0}
+label{display:block;font-size:13px;margin:13px 0 7px;color:#e0d5f6}
+input,textarea,select{
+ width:100%;padding:12px;border-radius:11px;
+ border:1px solid #ffffff26;background:#171126;
+ color:white;font-size:15px
+}
+textarea{min-height:90px;resize:vertical}
+input[type=file]{font-size:12px}
+button{
+ width:100%;padding:14px;border:0;border-radius:12px;
+ background:linear-gradient(100deg,#a855f7,#6d5dfc);
+ color:white;font-size:15px;font-weight:bold;margin-top:14px
+}
+button:disabled{opacity:.5}
+.row{display:flex;gap:10px}
+.row>div{flex:1;min-width:0}
+#status{white-space:pre-wrap;color:#e4d5ff;font-size:13px;line-height:1.6}
+#video{width:100%;margin-top:12px;border-radius:12px;background:#000}
+.hidden{display:none}
+a{color:#d9b8ff}
+small{color:#b9aaca;line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+<header>
+ <h1>✦ Vikku AI Studio</h1>
+ <p>Your story. Your characters. Your scenes.</p>
+</header>
+
+<section class="card">
+ <h2>01 · Create your project</h2>
+
+ <label for="username">Your name</label>
+ <input id="username" placeholder="Enter your name">
+
+ <label for="project">Project name</label>
+ <input id="project" placeholder="My AI Movie">
+
+ <label for="style">Visual style</label>
+ <select id="style">
+  <option value="cinematic realistic">Cinematic realistic</option>
+  <option value="anime">Anime</option>
+  <option value="3D animated">3D animation</option>
+  <option value="manhwa illustration">Manhwa</option>
+ </select>
+
+ <div class="row">
+  <div>
+   <label for="ratio">Video ratio</label>
+   <select id="ratio">
+    <option value="16:9">16:9 YouTube</option>
+    <option value="9:16">9:16 Shorts</option>
+   </select>
+  </div>
+  <div>
+   <label for="audio">Audio preference</label>
+   <select id="audio">
+    <option value="with audio">With audio</option>
+    <option value="silent">Silent if supported</option>
+   </select>
+  </div>
+ </div>
+</section>
+
+<section class="card">
+ <h2>02 · Reference image</h2>
+ <label for="referenceImage">Character or background image (optional)</label>
+ <input id="referenceImage" type="file"
+        accept="image/png,image/jpeg,image/webp">
+ <small>Upload one image, maximum 8 MB.</small>
+</section>
+
+<section class="card">
+ <h2>03 · Story and scene instructions</h2>
+
+ <label for="story">Your story</label>
+ <textarea id="story"
+ placeholder="A young hero walks through a mysterious forest at night..."></textarea>
+
+ <label for="camera">Camera angles and actions</label>
+ <textarea id="camera"
+ placeholder="Slow camera movement, character turns around, wind moves the trees..."></textarea>
+
+ <label for="extra">Additional instructions</label>
+ <textarea id="extra"
+ placeholder="Lighting, clothing, mood, environment and other details..."></textarea>
+
+ <button id="generate">✦ Generate AI Video</button>
+ <p id="status" role="status">Ready. Enter your story to begin.</p>
+</section>
+
+<section class="card">
+ <h2>04 · Your generated video</h2>
+ <video id="video" controls playsinline class="hidden"></video>
+ <p><a id="download" class="hidden" download="vikku-ai-scene.mp4">Download MP4 video</a></p>
+ <p class="muted">This version requests one short clip per generation. Long movies require multiple clips and video stitching.</p>
+</section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let videoURL = null;
+
+$("generate").addEventListener("click", async () => {
+ const button = $("generate");
+ const status = $("status");
+ const story = $("story").value.trim();
+
+ if (!story) {
+   status.textContent = "Please write your story first.";
+   $("story").focus();
+   return;
+ }
+
+ const form = new FormData();
+ form.append("username", $("username").value);
+ form.append("project", $("project").value);
+ form.append("style", $("style").value);
+ form.append("aspectRatio", $("ratio").value);
+ form.append("story", story);
+ form.append("camera", $("camera").value);
+ form.append("extra", $("extra").value);
+ form.append("audioPreference", $("audio").value);
+
+ const image = $("referenceImage").files[0];
+ if (image) {
+   if (image.size > 8 * 1024 * 1024) {
+     status.textContent = "Image is too large. Choose an image under 8 MB.";
+     return;
+   }
+   form.append("referenceImage", image);
+ }
+
+ button.disabled = true;
+ button.textContent = "Generating... Please wait";
+ status.textContent =
+   "Sending your prompt to the AI backend.\nVideo generation may take some time. Keep this page open.";
+
+ try {
+   const response = await fetch("/api/generate-video", {
+     method: "POST",
+     body: form
+   });
+
+   if (!response.ok) {
+     let message = "Request failed: " + response.status;
+     try {
+       const result = await response.json();
+       if (result.error) message = result.error;
+     } catch {}
+     throw new Error(message);
+   }
+
+   const blob = await response.blob();
+   if (!blob.type.startsWith("video/")) {
+     throw new Error("The server did not return a video file.");
+   }
+
+   if (videoURL) URL.revokeObjectURL(videoURL);
+   videoURL = URL.createObjectURL(blob);
+
+   const video = $("video");
+   video.src = videoURL;
+   video.classList.remove("hidden");
+
+   const download = $("download");
+   download.href = videoURL;
+   download.classList.remove("hidden");
+
+   status.textContent =
+     "Video received successfully! Play it or download the MP4 below.";
+ } catch (error) {
+   status.textContent =
+     "Video generation failed.\n\n" +
+     (error.message || "Unknown error") +
+     "\n\nCheck your backend deployment, API key, model access and quota.";
+ } finally {
+   button.disabled = false;
+   button.textContent = "✦ Generate AI Video";
+ }
+});
+</script>
+</body>
+  </html>
+  
